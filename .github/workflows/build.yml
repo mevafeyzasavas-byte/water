@@ -1,0 +1,35 @@
+name: APK Derle
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.4
+      - name: APK derle
+        run: gradle assembleDebug --no-daemon
+      - name: APK yükle (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuTakibi-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Release oluştur
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Su Takibi v${{ github.run_number }}
+          files: app/build/outputs/apk/debug/app-debug.apk

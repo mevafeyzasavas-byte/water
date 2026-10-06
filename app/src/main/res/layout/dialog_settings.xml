@@ -58,7 +58,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Hedef, hatırlatma ve bulut eşitleme"
+                    android:text="Hedef ve hatırlatma"
                     android:textColor="@color/muted"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -193,39 +193,6 @@
                                 android:layout_marginTop="8dp" />
                         </LinearLayout>
                     </LinearLayout>
-                </LinearLayout>
-
-                <TextView
-                    style="@style/SecLabel"
-                    android:text="BULUT EŞİTLEME" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_card"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Firebase veritabanı adresi"
-                        android:textColor="@color/muted"
-                        android:textSize="12sp" />
-
-                    <EditText
-                        android:id="@+id/etDb"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:background="@drawable/bg_input"
-                        android:hint="https://…firebasedatabase.app"
-                        android:inputType="textUri"
-                        android:maxLines="2"
-                        android:padding="12dp"
-                        android:textColor="@color/ink"
-                        android:textSize="12sp" />
-
                 </LinearLayout>
             </LinearLayout>
         </ScrollView>

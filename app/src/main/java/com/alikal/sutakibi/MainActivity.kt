@@ -112,9 +112,9 @@ class MainActivity : Activity() {
         ring.set(total, goal)
         val cloud = findViewById<TextView>(R.id.tvCloud)
         val on = Store.online(this)
-        cloud.text = if (on) "☁ Bulutla eşitlendi · diğer cihazlarda da aynı görünür"
-        else "☁ Çevrimdışı · bağlanınca otomatik eşitlenir"
-        cloud.setTextColor(Color.parseColor(if (on) "#2E9E5B" else "#C0392B"))
+        cloud.text = "☁ Çevrimdışı · bağlanınca otomatik eşitlenir"
+        cloud.visibility = if (on) View.GONE else View.VISIBLE
+        cloud.setTextColor(Color.parseColor("#C0392B"))
 
         if (Store.reached(this)) {
             tvNext.text = "Bugünkü hedef tamamlandı 🎉"
@@ -252,18 +252,12 @@ class MainActivity : Activity() {
         }
         paint()
 
-        val etDb = v.findViewById<EditText>(R.id.etDb)
-        etDb.setText(Store.dbUrl(this))
-
         v.findViewById<View>(R.id.btnSave).setOnClickListener {
             val g = getGoal(); val s = getStart(); val e = getEnd()
-            val u = etDb.text.toString().trim()
             when {
                 e <= s -> Toast.makeText(this, "Bitiş saati başlangıçtan sonra olmalı", Toast.LENGTH_LONG).show()
-                !u.startsWith("https://") -> Toast.makeText(this, "Veritabanı adresi https:// ile başlamalı", Toast.LENGTH_LONG).show()
                 else -> {
                     Store.saveSettings(this, g, interval, s, e)
-                    Store.setDbUrl(this, u)
                     Scheduler.schedule(this)
                     refresh()
                     doSync()

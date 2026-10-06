@@ -4,10 +4,13 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -17,7 +20,11 @@ import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowManager
 import android.widget.EditText
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -108,7 +115,8 @@ class MainActivity : Activity() {
         val cloud = findViewById<TextView>(R.id.tvCloud)
         val on = Store.online(this)
         cloud.text = if (on) "☁ Bulutla eşitlendi · diğer cihazlarda da aynı görünür"
-        else "☁ Çevrimdışı · bağlanınca otomatik eşitlenir"
+        else "☁ Çevrimdışı · bağlanınca otomatik eşitlenir" +
+            (if (Sync.lastError.isNotEmpty()) "\n⚠ ${Sync.lastError}" else "")
         cloud.setTextColor(Color.parseColor(if (on) "#2E9E5B" else "#C0392B"))
 
         if (Store.reached(this)) {
@@ -177,49 +185,120 @@ class MainActivity : Activity() {
             .setNegativeButton("Şimdi değil", null).show()
     }
 
-    private fun showSettings() {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(8), dp(24), 0)
+    private fun stepper(
+        host: LinearLayout, init: Int, min: Int, max: Int, step: Int,
+        big: Boolean, fmt: (Int) -> String
+    ): () -> Int {
+        var v = init
+        host.removeAllViews()
+        host.orientation = LinearLayout.HORIZONTAL
+        host.gravity = Gravity.CENTER_VERTICAL
+        val value = TextView(this).apply {
+            text = fmt(v); gravity = Gravity.CENTER
+            textSize = if (big) 28f else 18f
+            setTextColor(Color.parseColor("#0F2A3D"))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
-        fun field(label: String, value: Int): EditText {
-            box.addView(TextView(this).apply { text = label; textSize = 13f; setPadding(0, dp(12), 0, 0) })
-            val e = EditText(this).apply {
-                inputType = InputType.TYPE_CLASS_NUMBER; setText(value.toString())
-            }
-            box.addView(e)
-            return e
+        fun btn(label: String, d: Int) = TextView(this).apply {
+            text = label; gravity = Gravity.CENTER; textSize = 22f
+            setTextColor(Color.parseColor("#0A6EBD"))
+            setBackgroundResource(R.drawable.bg_step_btn)
+            setOnClickListener { v = (v + d).coerceIn(min, max); value.text = fmt(v) }
         }
-        val goal = field("Günlük hedef (ml)", Store.goal(this))
-        val interval = field("Hatırlatma aralığı (dakika)", Store.interval(this))
-        val start = field("Başlangıç saati (0-23)", Store.startHour(this))
-        val end = field("Bitiş saati (1-24)", Store.endHour(this))
-        box.addView(TextView(this).apply { text = "Firebase veritabanı adresi"; textSize = 13f; setPadding(0, dp(12), 0, 0) })
-        val db = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setText(Store.dbUrl(this@MainActivity)); textSize = 12f
-        }
-        box.addView(db)
+        val sz = dp(if (big) 44 else 38)
+        host.addView(btn("−", -step), LinearLayout.LayoutParams(sz, sz))
+        host.addView(value, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        host.addView(btn("+", step), LinearLayout.LayoutParams(sz, sz))
+        return { v }
+    }
 
-        AlertDialog.Builder(this)
-            .setTitle("Ayarlar")
-            .setView(box)
-            .setPositiveButton("Kaydet") { _, _ ->
-                val g = goal.text.toString().toIntOrNull() ?: 2000
-                val i = interval.text.toString().toIntOrNull() ?: 60
-                val s = start.text.toString().toIntOrNull() ?: 8
-                val e = end.text.toString().toIntOrNull() ?: 22
-                val u = db.text.toString().trim()
-                if (!u.startsWith("https://") || g !in 500..10000 || i !in 15..720 || s !in 0..23 || e !in 1..24 || e <= s) {
-                    Toast.makeText(this, "Geçersiz değer, ayarlar kaydedilmedi", Toast.LENGTH_LONG).show()
-                } else {
-                    Store.saveSettings(this, g, i, s, e)
+    private fun showSettings() {
+        val d = Dialog(this)
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val v = layoutInflater.inflate(R.layout.dialog_settings, null)
+        d.setContentView(v)
+        d.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setGravity(Gravity.BOTTOM)
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            setWindowAnimations(R.style.SheetAnim)
+            setDimAmount(0.45f)
+        }
+        v.findViewById<View>(R.id.root).setOnClickListener { d.dismiss() }
+        v.findViewById<View>(R.id.btnClose).setOnClickListener { d.dismiss() }
+        v.findViewById<View>(R.id.btnCancel).setOnClickListener { d.dismiss() }
+
+        val getGoal = stepper(v.findViewById(R.id.goalHost), Store.goal(this), 500, 10000, 250, true) { "$it ml" }
+        val getStart = stepper(v.findViewById(R.id.startHost), Store.startHour(this), 0, 23, 1, false) { "%02d:00".format(it) }
+        val getEnd = stepper(v.findViewById(R.id.endHost), Store.endHour(this), 1, 24, 1, false) { "%02d:00".format(it) }
+
+        // Aralık çipleri
+        var interval = Store.interval(this)
+        val chipRow = v.findViewById<LinearLayout>(R.id.chipRow)
+        val chips = mutableListOf<Pair<Int, TextView>>()
+        fun paint() = chips.forEach { (m, t) ->
+            val on = m == interval
+            t.setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip_off)
+            t.setTextColor(Color.parseColor(if (on) "#FFFFFF" else "#0F2A3D"))
+        }
+        for (m in (listOf(30, 45, 60, 90, 120, 180) + interval).distinct().sorted()) {
+            val t = TextView(this).apply {
+                text = if (m >= 60 && m % 60 == 0) "${m / 60} sa" else "$m dk"
+                textSize = 14f; gravity = Gravity.CENTER
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding(dp(16), 0, dp(16), 0)
+                setOnClickListener { interval = m; paint() }
+            }
+            chips.add(m to t)
+            chipRow.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)).apply { marginEnd = dp(8) })
+        }
+        paint()
+
+        // Bulut durumu
+        val dot = v.findViewById<View>(R.id.dot)
+        val tvConn = v.findViewById<TextView>(R.id.tvConn)
+        val etDb = v.findViewById<EditText>(R.id.etDb)
+        etDb.setText(Store.dbUrl(this))
+        fun status(ok: Boolean?, msg: String) {
+            val c = when (ok) { true -> "#2E9E5B"; false -> "#C0392B"; null -> "#8FA3B3" }
+            dot.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor(c)) }
+            tvConn.text = msg
+        }
+        if (Store.online(this)) status(true, "Bulutla eşitleniyor")
+        else status(false, "Çevrimdışı" + if (Sync.lastError.isNotEmpty()) " · ${Sync.lastError}" else "")
+
+        val btnTest = v.findViewById<Button>(R.id.btnTest)
+        btnTest.setOnClickListener {
+            val u = etDb.text.toString().trim()
+            if (!u.startsWith("https://")) { status(false, "Adres https:// ile başlamalı"); return@setOnClickListener }
+            btnTest.isEnabled = false
+            status(null, "Test ediliyor…")
+            Thread {
+                val r = Sync.test(u)
+                runOnUiThread {
+                    btnTest.isEnabled = true
+                    if (d.isShowing) status(r.first, r.second)
+                }
+            }.start()
+        }
+
+        v.findViewById<View>(R.id.btnSave).setOnClickListener {
+            val g = getGoal(); val s = getStart(); val e = getEnd()
+            val u = etDb.text.toString().trim()
+            when {
+                e <= s -> Toast.makeText(this, "Bitiş saati başlangıçtan sonra olmalı", Toast.LENGTH_LONG).show()
+                !u.startsWith("https://") -> Toast.makeText(this, "Veritabanı adresi https:// ile başlamalı", Toast.LENGTH_LONG).show()
+                else -> {
+                    Store.saveSettings(this, g, interval, s, e)
                     Store.setDbUrl(this, u)
                     Scheduler.schedule(this)
                     refresh()
                     doSync()
+                    d.dismiss()
                 }
             }
-            .setNegativeButton("Vazgeç", null).show()
+        }
+        d.show()
     }
 }

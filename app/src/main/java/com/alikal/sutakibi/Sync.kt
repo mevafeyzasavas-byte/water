@@ -7,27 +7,6 @@ import java.net.URL
 
 /** Firebase Realtime Database (REST) ile cihazlar arası eşitleme. Yol: /su/<yyyy-MM-dd>/<kayıt-id> */
 object Sync {
-    /** Son başarısız isteğin sebebi (çevrimdışı uyarısında gösterilir). */
-    @Volatile var lastError: String = ""
-
-    private fun describe(code: Int) = when (code) {
-        401, 403 -> "Firebase kuralları erişimi reddediyor"
-        404 -> "Veritabanı adresi bulunamadı"
-        else -> "Sunucu hatası (HTTP $code)"
-    }
-
-    /** Ayarlardaki "Bağlantıyı test et" için. */
-    fun test(url: String): Pair<Boolean, String> = try {
-        val con = URL(url.trim().trimEnd('/') + "/su.json?shallow=true").openConnection() as HttpURLConnection
-        con.connectTimeout = 5000
-        con.readTimeout = 5000
-        val code = con.responseCode
-        con.disconnect()
-        if (code in 200..299) true to "Bağlantı başarılı" else false to describe(code)
-    } catch (e: Exception) {
-        false to "Sunucuya ulaşılamıyor (internet veya adres)"
-    }
-
     private fun dayUrl(c: Context, day: String, sub: String = "") =
         "${Store.dbUrl(c).trim().trimEnd('/')}/su/$day$sub.json"
 
@@ -45,9 +24,8 @@ object Sync {
         val text = (if (code in 200..299) con.inputStream else con.errorStream)
             ?.bufferedReader()?.use { it.readText() }
         con.disconnect()
-        if (code in 200..299) { lastError = ""; text ?: "" } else { lastError = describe(code); null }
+        if (code in 200..299) text ?: "" else null
     } catch (e: Exception) {
-        lastError = "İnternet yok veya sunucuya ulaşılamıyor"
         null
     }
 

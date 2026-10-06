@@ -10,7 +10,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,7 +23,6 @@ import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
 import android.widget.EditText
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -115,8 +113,7 @@ class MainActivity : Activity() {
         val cloud = findViewById<TextView>(R.id.tvCloud)
         val on = Store.online(this)
         cloud.text = if (on) "☁ Bulutla eşitlendi · diğer cihazlarda da aynı görünür"
-        else "☁ Çevrimdışı · bağlanınca otomatik eşitlenir" +
-            (if (Sync.lastError.isNotEmpty()) "\n⚠ ${Sync.lastError}" else "")
+        else "☁ Çevrimdışı · bağlanınca otomatik eşitlenir"
         cloud.setTextColor(Color.parseColor(if (on) "#2E9E5B" else "#C0392B"))
 
         if (Store.reached(this)) {
@@ -255,33 +252,8 @@ class MainActivity : Activity() {
         }
         paint()
 
-        // Bulut durumu
-        val dot = v.findViewById<View>(R.id.dot)
-        val tvConn = v.findViewById<TextView>(R.id.tvConn)
         val etDb = v.findViewById<EditText>(R.id.etDb)
         etDb.setText(Store.dbUrl(this))
-        fun status(ok: Boolean?, msg: String) {
-            val c = when (ok) { true -> "#2E9E5B"; false -> "#C0392B"; null -> "#8FA3B3" }
-            dot.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor(c)) }
-            tvConn.text = msg
-        }
-        if (Store.online(this)) status(true, "Bulutla eşitleniyor")
-        else status(false, "Çevrimdışı" + if (Sync.lastError.isNotEmpty()) " · ${Sync.lastError}" else "")
-
-        val btnTest = v.findViewById<Button>(R.id.btnTest)
-        btnTest.setOnClickListener {
-            val u = etDb.text.toString().trim()
-            if (!u.startsWith("https://")) { status(false, "Adres https:// ile başlamalı"); return@setOnClickListener }
-            btnTest.isEnabled = false
-            status(null, "Test ediliyor…")
-            Thread {
-                val r = Sync.test(u)
-                runOnUiThread {
-                    btnTest.isEnabled = true
-                    if (d.isShowing) status(r.first, r.second)
-                }
-            }.start()
-        }
 
         v.findViewById<View>(R.id.btnSave).setOnClickListener {
             val g = getGoal(); val s = getStart(); val e = getEnd()

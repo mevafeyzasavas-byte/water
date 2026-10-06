@@ -11,6 +11,8 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -55,11 +57,40 @@ class MainActivity : Activity() {
         }
     }
 
+    private val handler = Handler(Looper.getMainLooper())
+    private val poll = object : Runnable {
+        override fun run() {
+            doSync()
+            handler.postDelayed(this, 15000)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         Scheduler.schedule(this)
         refresh()
         askExactAlarm()
+        handler.post(poll) // açıkken 15 sn'de bir buluttan güncel durumu çeker
+    }
+
+    override fun onPause() {
+        super.onPause()
+        handler.removeCallbacks(poll)
+    }
+
+    private fun doSync() {
+        val app = applicationContext
+        Thread {
+            val changed = Sync.syncNow(app)
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                if (changed) {
+                    if (Store.reached(this)) Notifier.cancel(this)
+                    Scheduler.schedule(this)
+                }
+                refresh()
+            }
+        }.start()
     }
 
     private fun add(ml: Int) {
@@ -67,12 +98,18 @@ class MainActivity : Activity() {
         Notifier.cancel(this)
         Scheduler.schedule(this)
         refresh()
+        doSync()
     }
 
     private fun refresh() {
         val total = Store.total(this)
         val goal = Store.goal(this)
         ring.set(total, goal)
+        val cloud = findViewById<TextView>(R.id.tvCloud)
+        val on = Store.online(this)
+        cloud.text = if (on) "☁ Bulutla eşitlendi · diğer cihazlarda da aynı görünür"
+        else "☁ Çevrimdışı · bağlanınca otomatik eşitlenir"
+        cloud.setTextColor(Color.parseColor(if (on) "#2E9E5B" else "#C0392B"))
 
         if (Store.reached(this)) {
             tvNext.text = "Bugünkü hedef tamamlandı 🎉"
@@ -87,7 +124,9 @@ class MainActivity : Activity() {
         logs.removeAllViews()
         val list = Store.logs(this)
         for (idx in list.indices.reversed()) {
-            val (time, ml) = list[idx]
+            val entry = list[idx]
+            val time = entry.time
+            val ml = entry.ml
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -99,6 +138,7 @@ class MainActivity : Activity() {
                             Store.removeAt(this@MainActivity, idx)
                             Scheduler.schedule(this@MainActivity)
                             refresh()
+                            doSync()
                         }
                         .setNegativeButton("Vazgeç", null).show()
                 }
@@ -154,6 +194,12 @@ class MainActivity : Activity() {
         val interval = field("Hatırlatma aralığı (dakika)", Store.interval(this))
         val start = field("Başlangıç saati (0-23)", Store.startHour(this))
         val end = field("Bitiş saati (1-24)", Store.endHour(this))
+        box.addView(TextView(this).apply { text = "Firebase veritabanı adresi"; textSize = 13f; setPadding(0, dp(12), 0, 0) })
+        val db = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText(Store.dbUrl(this@MainActivity)); textSize = 12f
+        }
+        box.addView(db)
 
         AlertDialog.Builder(this)
             .setTitle("Ayarlar")
@@ -163,12 +209,15 @@ class MainActivity : Activity() {
                 val i = interval.text.toString().toIntOrNull() ?: 60
                 val s = start.text.toString().toIntOrNull() ?: 8
                 val e = end.text.toString().toIntOrNull() ?: 22
-                if (g !in 500..10000 || i !in 15..720 || s !in 0..23 || e !in 1..24 || e <= s) {
+                val u = db.text.toString().trim()
+                if (!u.startsWith("https://") || g !in 500..10000 || i !in 15..720 || s !in 0..23 || e !in 1..24 || e <= s) {
                     Toast.makeText(this, "Geçersiz değer, ayarlar kaydedilmedi", Toast.LENGTH_LONG).show()
                 } else {
                     Store.saveSettings(this, g, i, s, e)
+                    Store.setDbUrl(this, u)
                     Scheduler.schedule(this)
                     refresh()
+                    doSync()
                 }
             }
             .setNegativeButton("Vazgeç", null).show()
